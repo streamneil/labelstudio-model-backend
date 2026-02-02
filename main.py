@@ -305,14 +305,29 @@ class KimiClient:
                     image_data = None
                     
                     # Try local file system first (if mounted)
-                    if text.startswith(("/data/", "/files/")) and os.path.exists(text):
-                        self.logger.info(f"Reading image directly from disk: {text}", extra=extra_log)
-                        try:
-                            with open(text, "rb") as f:
-                                image_data = base64.b64encode(f.read()).decode('utf-8')
-                            extra_log["source"] = "disk"
-                        except Exception as e:
-                            self.logger.warning(f"Failed to read from disk, falling back to network: {e}", extra=extra_log)
+                    if text.startswith(("/data/", "/files/")):
+                        # List of potential paths to check
+                        # 1. As provided
+                        # 2. Injecting 'media' (common LS structure: /data/media/upload vs URL /data/upload)
+                        candidates = [text]
+                        if text.startswith("/data/"):
+                            candidates.append(text.replace("/data/", "/data/media/", 1))
+                        
+                        file_found = False
+                        for candidate in candidates:
+                            if os.path.exists(candidate):
+                                self.logger.info(f"Reading image directly from disk: {candidate}", extra=extra_log)
+                                try:
+                                    with open(candidate, "rb") as f:
+                                        image_data = base64.b64encode(f.read()).decode('utf-8')
+                                    extra_log["source"] = "disk"
+                                    file_found = True
+                                    break
+                                except Exception as e:
+                                    self.logger.warning(f"Failed to read from disk ({candidate}): {e}", extra=extra_log)
+                        
+                        if not file_found:
+                            self.logger.warning(f"Local file not found. Checked: {candidates}", extra=extra_log)
 
                     # Fallback to HTTP fetch if not on disk or not a local path
                     if image_data is None:
