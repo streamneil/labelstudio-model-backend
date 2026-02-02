@@ -287,135 +287,87 @@ class KimiClient:
     
     async def generate_label(self, text: str, request_id: str) -> str:
         """
-        Generate label for text using Kimi API.
-        Implements retry logic and detailed error handling.
+        Generate label for text/image using Kimi API.
+        Supports local file reading (if mounted) or HTTP fetching.
         """
         async with self.semaphore:
             start_time = time.time()
-            
             extra_log = {"request_id": request_id}
+            text = text.strip()
             
             try:
-                # Truncate very long text to avoid token limit
-                max_text_length = 8000
-                if len(text) > max_text_length:
-                    self.logger.warning(
-                        f"Text truncated from {len(text)} to {max_text_length} chars",
-                        extra=extra_log
-                    )
-                    text = text[:max_text_length] + "..."
+                content = []
+                is_vision = False
                 
-                # Construct messages based on input type (Text vs Image URL vs Local Image)
-                text = text.strip()
-                messages = []
-                
-                # Debug logging for input analysis
-                self.logger.info(f"Analyzing input text: '{text[:50]}...' (Starts with /data/ or /files/: {text.startswith(('/data/', '/files/'))}, Host configured: {bool(self.config.label_studio_host)})", extra=extra_log)
-
-                # Check for public URL
-                if text.startswith(("http://", "https://")):
-                    messages = [
-                        {"role": "system", "content": self.config.system_prompt},
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "image_url", "image_url": {"url": text}},
-                                {"type": "text", "text": "请详细描述这张图片的内容。"}
-                            ]
-                        }
-                    ]
-                    extra_log["input_type"] = "image_url"
-                
-                # Check for local Label Studio path (e.g. /data/upload/...)
-                elif text.startswith(("/data/", "/files/")):
-                    if self.config.label_studio_host:
+                # Check if it's an image path or URL
+                if text.startswith(("/data/", "/files/", "http://", "https://")):
+                    is_vision = True
+                    image_data = None
+                    
+                    # Try local file system first (if mounted)
+                    if text.startswith(("/data/", "/files/")) and os.path.exists(text):
+                        self.logger.info(f"Reading image directly from disk: {text}", extra=extra_log)
                         try:
-                            # Construct full URL
-                            full_url = f"{self.config.label_studio_host.rstrip('/')}{text}"
-                            self.logger.info(f"Fetching local image from: {full_url}", extra=extra_log)
-                            
-                            headers = {}
-                            if self.config.label_studio_api_key:
-                                headers["Authorization"] = f"Token {self.config.label_studio_api_key}"
-                            
-                            # Fetch image
-                            image_response = self.http_client.get(full_url, headers=headers)
-                            image_response.raise_for_status()
-                            
-                            # Encode base64
-                            base64_image = base64.b64encode(image_response.content).decode('utf-8')
-                            
-                            messages = [
-                                {"role": "system", "content": self.config.system_prompt},
-                                {
-                                    "role": "user",
-                                    "content": [
-                                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}},
-                                        {"type": "text", "text": "请详细描述这张图片的内容。"}
-                                    ]
-                                }
-                            ]
-                            extra_log["input_type"] = "image_base64"
-                            
+                            with open(text, "rb") as f:
+                                image_data = base64.b64encode(f.read()).decode('utf-8')
+                            extra_log["source"] = "disk"
                         except Exception as e:
-                            self.logger.error(f"Failed to fetch local image: {e}", extra=extra_log)
-                            # Fallback to text mode if fetching fails
-                            messages = [
-                                {"role": "system", "content": self.config.system_prompt},
-                                {"role": "user", "content": text}
-                            ]
-                            extra_log["input_type"] = "text_fallback"
-                    else:
-                        self.logger.warning("Received local file path but LABEL_STUDIO_HOST is not configured. Cannot fetch image.", extra=extra_log)
-                        messages = [
-                            {"role": "system", "content": self.config.system_prompt},
-                            {"role": "user", "content": text}
-                        ]
-                        extra_log["input_type"] = "text_no_host"
+                            self.logger.warning(f"Failed to read from disk, falling back to network: {e}", extra=extra_log)
 
-                else:
-                    # Standard text processing
-                    messages = [
-                        {"role": "system", "content": self.config.system_prompt},
-                        {"role": "user", "content": text}
+                    # Fallback to HTTP fetch if not on disk or not a local path
+                    if image_data is None:
+                        full_url = text
+                        if text.startswith(("/data/", "/files/")):
+                            if not self.config.label_studio_host:
+                                raise ValueError("LABEL_STUDIO_HOST is not configured for local paths")
+                            full_url = f"{self.config.label_studio_host.rstrip('/')}{text}"
+                        
+                        self.logger.info(f"Fetching image via HTTP: {full_url}", extra=extra_log)
+                        headers = {"Authorization": f"Token {self.config.label_studio_api_key}"} if self.config.label_studio_api_key else {}
+                        
+                        # Use async client for non-blocking fetch
+                        async with httpx.AsyncClient(timeout=30.0) as client:
+                            resp = await client.get(full_url, headers=headers)
+                            resp.raise_for_status()
+                            image_data = base64.b64encode(resp.content).decode('utf-8')
+                        extra_log["source"] = "http"
+
+                    content = [
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}},
+                        {"type": "text", "text": "请详细描述这张图片的内容，直接输出描述，不要有任何前缀。"}
                     ]
-                    extra_log["input_type"] = "text"
+                else:
+                    content = text
+                    extra_log["source"] = "text"
+
+                messages = [
+                    {"role": "system", "content": self.config.system_prompt},
+                    {"role": "user", "content": content}
+                ]
                 
-                # Run synchronous API call in thread pool
+                # Call Kimi API (using thread pool for the sync SDK call)
                 loop = asyncio.get_event_loop()
                 response = await loop.run_in_executor(
-                    None,  # Default executor
+                    None,
                     lambda: self.client.chat.completions.create(
                         model=self.config.model_name,
                         messages=messages,
                         temperature=0.3,
                         max_tokens=2048,
-                        top_p=0.9,
                     )
                 )
-                
-                duration = time.time() - start_time
                 
                 generated_text = response.choices[0].message.content.strip()
                 
-                # Check for "fake" success where text is actually an error message
-                error_signatures = ["HTTPSConnectionPool", "Read timed out", "read timeout", "SocketTimeout"]
-                if any(sig in generated_text for sig in error_signatures):
-                    self.logger.error(
-                        f"Detected error message in response content: {generated_text}",
-                        extra=extra_log
-                    )
-                    raise HTTPException(
-                        status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                        detail="Upstream API timeout detected in response body"
-                    )
+                # Error signature check
+                if any(sig in generated_text for sig in ["HTTPSConnectionPool", "Read timed out"]):
+                    raise HTTPException(status_code=504, detail="Upstream timeout")
 
+                duration = time.time() - start_time
                 self.logger.info(
-                    f"Kimi API call successful, duration={duration:.2f}s, "
-                    f"tokens={response.usage.total_tokens if response.usage else 'N/A'}",
+                    f"Kimi API success, type={'vision' if is_vision else 'text'}, duration={duration:.2f}s",
                     extra=extra_log
                 )
-                
                 return generated_text
                 
             except openai.APITimeoutError as e:

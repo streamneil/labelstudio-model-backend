@@ -28,6 +28,8 @@ services:
       - BIND_PORT=8751
     volumes:
       - ./logs:/app/logs
+      # RECOMMENDED: Mount Label Studio data directory for direct image access
+      # - /path/to/your/label-studio/data:/data:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
