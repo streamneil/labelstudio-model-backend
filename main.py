@@ -298,10 +298,28 @@ class KimiClient:
                     )
                     text = text[:max_text_length] + "..."
                 
-                messages = [
-                    {"role": "system", "content": self.config.system_prompt},
-                    {"role": "user", "content": text}
-                ]
+                # Construct messages based on input type (Text vs Image URL)
+                if text.strip().startswith(("http://", "https://")):
+                    # Assume it's an image URL for Vision model
+                    messages = [
+                        {"role": "system", "content": self.config.system_prompt},
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "image_url", "image_url": {"url": text.strip()}},
+                                {"type": "text", "text": "请详细描述这张图片的内容。"}
+                            ]
+                        }
+                    ]
+                    # Ensure we log that we are processing an image
+                    extra_log["input_type"] = "image"
+                else:
+                    # Standard text processing
+                    messages = [
+                        {"role": "system", "content": self.config.system_prompt},
+                        {"role": "user", "content": text}
+                    ]
+                    extra_log["input_type"] = "text"
                 
                 # Run synchronous API call in thread pool
                 loop = asyncio.get_event_loop()
