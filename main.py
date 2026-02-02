@@ -38,7 +38,7 @@ class Config:
     base_url: str = "https://api.moonshot.cn/v1"
     
     # Timeout Settings (seconds)
-    api_timeout: float = 120.0
+    api_timeout: float = 300.0
     api_connect_timeout: float = 10.0
     
     # Performance Settings
@@ -75,7 +75,7 @@ class Config:
             moonshot_api_key=api_key,
             model_name=os.getenv("MOONSHOT_MODEL", "kimi-k2-0905-Preview"),
             base_url=os.getenv("MOONSHOT_BASE_URL", "https://api.moonshot.cn/v1"),
-            api_timeout=float(os.getenv("KIMI_API_TIMEOUT", "120")),
+            api_timeout=float(os.getenv("KIMI_API_TIMEOUT", "300")),
             api_connect_timeout=float(os.getenv("KIMI_CONNECT_TIMEOUT", "10")),
             max_retries=int(os.getenv("MAX_RETRIES", "2")),
             max_concurrent_requests=int(os.getenv("MAX_CONCURRENT", "10")),
@@ -320,6 +320,18 @@ class KimiClient:
                 
                 generated_text = response.choices[0].message.content.strip()
                 
+                # Check for "fake" success where text is actually an error message
+                error_signatures = ["HTTPSConnectionPool", "Read timed out", "read timeout", "SocketTimeout"]
+                if any(sig in generated_text for sig in error_signatures):
+                    self.logger.error(
+                        f"Detected error message in response content: {generated_text}",
+                        extra=extra_log
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                        detail="Upstream API timeout detected in response body"
+                    )
+
                 self.logger.info(
                     f"Kimi API call successful, duration={duration:.2f}s, "
                     f"tokens={response.usage.total_tokens if response.usage else 'N/A'}",
