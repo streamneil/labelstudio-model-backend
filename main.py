@@ -505,8 +505,6 @@ async def process_single_task(
         
         return prediction
         
-    except HTTPException:
-        raise
     except Exception as e:
         app_state.logger.error(
             f"Error processing task {task_id}: {e}",
