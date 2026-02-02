@@ -523,7 +523,7 @@ async def readiness_check():
         )
 
 
-@app.post("/setup")
+@app.api_route("/setup", methods=["GET", "POST"])
 async def setup(request: Request):
     """
     Setup endpoint for Label Studio.
