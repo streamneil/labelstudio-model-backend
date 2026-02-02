@@ -1,8 +1,8 @@
 services:
-  kimi-ml-backend:
+  ml-backend:
     build: .
-    image: labelstudio-kimi-backend:latest
-    container_name: labelstudio-kimi-backend
+    image: labelstudio-ml-backend:latest
+    container_name: labelstudio-ml-backend
     ports:
       - "${BIND_PORT:-8751}:8751"
     environment:
