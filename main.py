@@ -523,6 +523,19 @@ async def readiness_check():
         )
 
 
+@app.post("/setup")
+async def setup(request: Request):
+    """
+    Setup endpoint for Label Studio.
+    Required for model validation and initialization.
+    Returns model version and configuration.
+    """
+    return {
+        "model_version": app_state.config.model_name,
+        "labels": []  # Optional: return available labels if fixed
+    }
+
+
 @app.post("/predict")
 async def predict(request: PredictRequest, req: Request):
     """
