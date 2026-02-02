@@ -8,6 +8,7 @@ import sys
 import time
 import uuid
 import asyncio
+import base64
 from typing import List, Dict, Any, Optional, Union
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -55,6 +56,10 @@ class Config:
     label_studio_to_name: str = "text"
     label_studio_data_key: str = "text"
     
+    # Label Studio Connection (for fetching images)
+    label_studio_host: str = ""
+    label_studio_api_key: str = ""
+    
     # Prompt Template
     system_prompt: str = (
         "你是一个智能标注助手。请根据用户提供的文本内容，生成准确的标注结果。\n"
@@ -84,6 +89,8 @@ class Config:
             label_studio_from_name=os.getenv("LABEL_STUDIO_FROM_NAME", "label"),
             label_studio_to_name=os.getenv("LABEL_STUDIO_TO_NAME", "text"),
             label_studio_data_key=os.getenv("LABEL_STUDIO_DATA_KEY", "text"),
+            label_studio_host=os.getenv("LABEL_STUDIO_HOST", ""),
+            label_studio_api_key=os.getenv("LABEL_STUDIO_API_KEY", ""),
             system_prompt=os.getenv("SYSTEM_PROMPT", cls.system_prompt),
         )
 
@@ -298,21 +305,63 @@ class KimiClient:
                     )
                     text = text[:max_text_length] + "..."
                 
-                # Construct messages based on input type (Text vs Image URL)
-                if text.strip().startswith(("http://", "https://")):
-                    # Assume it's an image URL for Vision model
+                # Construct messages based on input type (Text vs Image URL vs Local Image)
+                text = text.strip()
+                messages = []
+                
+                # Check for public URL
+                if text.startswith(("http://", "https://")):
                     messages = [
                         {"role": "system", "content": self.config.system_prompt},
                         {
                             "role": "user",
                             "content": [
-                                {"type": "image_url", "image_url": {"url": text.strip()}},
+                                {"type": "image_url", "image_url": {"url": text}},
                                 {"type": "text", "text": "请详细描述这张图片的内容。"}
                             ]
                         }
                     ]
-                    # Ensure we log that we are processing an image
-                    extra_log["input_type"] = "image"
+                    extra_log["input_type"] = "image_url"
+                
+                # Check for local Label Studio path (e.g. /data/upload/...)
+                elif text.startswith(("/data/", "/files/")) and self.config.label_studio_host:
+                    try:
+                        # Construct full URL
+                        full_url = f"{self.config.label_studio_host.rstrip('/')}{text}"
+                        self.logger.info(f"Fetching local image from: {full_url}", extra=extra_log)
+                        
+                        headers = {}
+                        if self.config.label_studio_api_key:
+                            headers["Authorization"] = f"Token {self.config.label_studio_api_key}"
+                        
+                        # Fetch image
+                        image_response = self.http_client.get(full_url, headers=headers)
+                        image_response.raise_for_status()
+                        
+                        # Encode base64
+                        base64_image = base64.b64encode(image_response.content).decode('utf-8')
+                        
+                        messages = [
+                            {"role": "system", "content": self.config.system_prompt},
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}},
+                                    {"type": "text", "text": "请详细描述这张图片的内容。"}
+                                ]
+                            }
+                        ]
+                        extra_log["input_type"] = "image_base64"
+                        
+                    except Exception as e:
+                        self.logger.error(f"Failed to fetch local image: {e}", extra=extra_log)
+                        # Fallback to text mode if fetching fails (will likely result in model complaining about path)
+                        messages = [
+                            {"role": "system", "content": self.config.system_prompt},
+                            {"role": "user", "content": text}
+                        ]
+                        extra_log["input_type"] = "text_fallback"
+
                 else:
                     # Standard text processing
                     messages = [
