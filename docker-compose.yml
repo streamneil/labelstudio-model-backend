@@ -1,0 +1,34 @@
+services:
+  kimi-ml-backend:
+    build: .
+    image: labelstudio-kimi-backend:latest
+    container_name: labelstudio-kimi-backend
+    ports:
+      - "${BIND_PORT:-8751}:8751"
+    environment:
+      # Required
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY}
+      
+      # Optional - Model Settings
+      - MOONSHOT_MODEL=${MOONSHOT_MODEL:-kimi-k2-0905-Preview}
+      - LABEL_STUDIO_FROM_NAME=${LABEL_STUDIO_FROM_NAME:-label}
+      - LABEL_STUDIO_TO_NAME=${LABEL_STUDIO_TO_NAME:-text}
+      
+      # Optional - Performance
+      - WORKER_COUNT=${WORKER_COUNT:-4}
+      - MAX_CONCURRENT=${MAX_CONCURRENT:-10}
+      - KIMI_API_TIMEOUT=${KIMI_API_TIMEOUT:-120}
+      
+      # Optional - Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Fixed port inside container
+      - BIND_PORT=8751
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8751/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
