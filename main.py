@@ -309,6 +309,9 @@ class KimiClient:
                 text = text.strip()
                 messages = []
                 
+                # Debug logging for input analysis
+                self.logger.info(f"Analyzing input text: '{text[:50]}...' (Starts with /data/ or /files/: {text.startswith(('/data/', '/files/'))}, Host configured: {bool(self.config.label_studio_host)})", extra=extra_log)
+
                 # Check for public URL
                 if text.startswith(("http://", "https://")):
                     messages = [
@@ -324,43 +327,51 @@ class KimiClient:
                     extra_log["input_type"] = "image_url"
                 
                 # Check for local Label Studio path (e.g. /data/upload/...)
-                elif text.startswith(("/data/", "/files/")) and self.config.label_studio_host:
-                    try:
-                        # Construct full URL
-                        full_url = f"{self.config.label_studio_host.rstrip('/')}{text}"
-                        self.logger.info(f"Fetching local image from: {full_url}", extra=extra_log)
-                        
-                        headers = {}
-                        if self.config.label_studio_api_key:
-                            headers["Authorization"] = f"Token {self.config.label_studio_api_key}"
-                        
-                        # Fetch image
-                        image_response = self.http_client.get(full_url, headers=headers)
-                        image_response.raise_for_status()
-                        
-                        # Encode base64
-                        base64_image = base64.b64encode(image_response.content).decode('utf-8')
-                        
-                        messages = [
-                            {"role": "system", "content": self.config.system_prompt},
-                            {
-                                "role": "user",
-                                "content": [
-                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}},
-                                    {"type": "text", "text": "请详细描述这张图片的内容。"}
-                                ]
-                            }
-                        ]
-                        extra_log["input_type"] = "image_base64"
-                        
-                    except Exception as e:
-                        self.logger.error(f"Failed to fetch local image: {e}", extra=extra_log)
-                        # Fallback to text mode if fetching fails (will likely result in model complaining about path)
+                elif text.startswith(("/data/", "/files/")):
+                    if self.config.label_studio_host:
+                        try:
+                            # Construct full URL
+                            full_url = f"{self.config.label_studio_host.rstrip('/')}{text}"
+                            self.logger.info(f"Fetching local image from: {full_url}", extra=extra_log)
+                            
+                            headers = {}
+                            if self.config.label_studio_api_key:
+                                headers["Authorization"] = f"Token {self.config.label_studio_api_key}"
+                            
+                            # Fetch image
+                            image_response = self.http_client.get(full_url, headers=headers)
+                            image_response.raise_for_status()
+                            
+                            # Encode base64
+                            base64_image = base64.b64encode(image_response.content).decode('utf-8')
+                            
+                            messages = [
+                                {"role": "system", "content": self.config.system_prompt},
+                                {
+                                    "role": "user",
+                                    "content": [
+                                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}},
+                                        {"type": "text", "text": "请详细描述这张图片的内容。"}
+                                    ]
+                                }
+                            ]
+                            extra_log["input_type"] = "image_base64"
+                            
+                        except Exception as e:
+                            self.logger.error(f"Failed to fetch local image: {e}", extra=extra_log)
+                            # Fallback to text mode if fetching fails
+                            messages = [
+                                {"role": "system", "content": self.config.system_prompt},
+                                {"role": "user", "content": text}
+                            ]
+                            extra_log["input_type"] = "text_fallback"
+                    else:
+                        self.logger.warning("Received local file path but LABEL_STUDIO_HOST is not configured. Cannot fetch image.", extra=extra_log)
                         messages = [
                             {"role": "system", "content": self.config.system_prompt},
                             {"role": "user", "content": text}
                         ]
-                        extra_log["input_type"] = "text_fallback"
+                        extra_log["input_type"] = "text_no_host"
 
                 else:
                     # Standard text processing
