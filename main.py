@@ -422,7 +422,7 @@ def create_labelstudio_prediction(generated_text: str) -> Dict[str, Any]:
     
     Uses configured from_name and to_name to match Label Studio XML config.
     """
-    return {
+    prediction = {
         "result": [
             {
                 "from_name": app_state.config.label_studio_from_name,
@@ -434,8 +434,12 @@ def create_labelstudio_prediction(generated_text: str) -> Dict[str, Any]:
             }
         ],
         "model_version": app_state.config.model_name,
-        "score": None
+        "score": 1.0  # Set a default confidence score
     }
+    
+    # Log the prediction for debugging
+    app_state.logger.info(f"Generated prediction: {json.dumps(prediction, ensure_ascii=False)}")
+    return prediction
 
 
 async def process_single_task(
