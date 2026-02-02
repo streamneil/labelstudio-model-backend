@@ -13,6 +13,7 @@ services:
       - MOONSHOT_MODEL=${MOONSHOT_MODEL:-kimi-k2-0905-Preview}
       - LABEL_STUDIO_FROM_NAME=${LABEL_STUDIO_FROM_NAME:-label}
       - LABEL_STUDIO_TO_NAME=${LABEL_STUDIO_TO_NAME:-text}
+      - LABEL_STUDIO_DATA_KEY=${LABEL_STUDIO_DATA_KEY:-text}
       
       # Optional - Performance
       - WORKER_COUNT=${WORKER_COUNT:-4}

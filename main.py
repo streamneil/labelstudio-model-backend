@@ -53,6 +53,7 @@ class Config:
     # Label Studio Settings
     label_studio_from_name: str = "label"
     label_studio_to_name: str = "text"
+    label_studio_data_key: str = "text"
     
     # Prompt Template
     system_prompt: str = (
@@ -82,6 +83,7 @@ class Config:
             enable_metrics=os.getenv("ENABLE_METRICS", "true").lower() == "true",
             label_studio_from_name=os.getenv("LABEL_STUDIO_FROM_NAME", "label"),
             label_studio_to_name=os.getenv("LABEL_STUDIO_TO_NAME", "text"),
+            label_studio_data_key=os.getenv("LABEL_STUDIO_DATA_KEY", "text"),
             system_prompt=os.getenv("SYSTEM_PROMPT", cls.system_prompt),
         )
 
@@ -445,16 +447,30 @@ async def process_single_task(
     Errors are caught and returned as failed predictions instead of failing entire batch.
     """
     task_id = task.id or "unknown"
-    text = task.data.text
+    
+    # Get text from configured data key
+    data_key = app_state.config.label_studio_data_key
+    text = getattr(task.data, data_key, None)
+    
+    # Fallback: try dictionary access if TaskData has extra fields
+    if text is None and hasattr(task.data, '__dict__'):
+        text = task.data.__dict__.get(data_key)
+        
+    # If still None, try to get 'text' as default fallback
+    if text is None:
+        text = getattr(task.data, 'text', None)
+        
+    # Convert to string if found
+    if text is not None:
+        text = str(text)
     
     extra_log = {"request_id": request_id, "task_id": str(task_id)}
     
     if not text or not text.strip():
         app_state.logger.warning(
-            "Empty text in task, returning empty prediction",
+            f"Empty text in task (key='{data_key}'), returning empty prediction",
             extra=extra_log
         )
-        TASK_COUNTER.labels(status="empty").inc()
         return create_labelstudio_prediction("")
     
     try:
