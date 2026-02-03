@@ -17,29 +17,45 @@ class KimiBackend(LabelStudioMLBase):
     """
     Kimi (Moonshot) Backend for Label Studio
     """
-    
+    # Class-level defaults to prevent AttributeError
+    api_key = None
+    base_url = None
+    system_prompt = "你是一个智能标注助手。请详细描述这张图片的内容。"
+    label_studio_host = None
+    label_studio_api_key = None
+    client = None
+
     def __init__(self, **kwargs):
         # Call base class init first
         super(KimiBackend, self).__init__(**kwargs)
+        # Ensure setup is called
+        self.setup()
+
+    def setup(self):
+        """
+        Setup model, load config, initialize clients
+        """
+        logger.info("Initializing KimiBackend configuration...")
         
-        # Load config and setup
         self.set("model_version", os.getenv("MOONSHOT_MODEL", "moonshot-v1-8k-vision-preview"))
+        
+        # Configuration
         self.api_key = os.getenv("MOONSHOT_API_KEY")
         self.base_url = os.getenv("MOONSHOT_BASE_URL", "https://api.moonshot.cn/v1")
         self.system_prompt = os.getenv("SYSTEM_PROMPT", "你是一个智能标注助手。请详细描述这张图片的内容。")
         self.label_studio_host = os.getenv("LABEL_STUDIO_HOST", "")
         self.label_studio_api_key = os.getenv("LABEL_STUDIO_API_KEY", "")
         
-        # OpenAI Client
-        self.client = openai.OpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url,
-            max_retries=2
-        )
-
-    # setup is deprecated in some versions or called implicitly, but we handle it in init now
-    def setup(self):
-        pass
+        if self.api_key:
+            # OpenAI Client
+            self.client = openai.OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url,
+                max_retries=2
+            )
+            logger.info("OpenAI client initialized.")
+        else:
+            logger.warning("MOONSHOT_API_KEY not found. Client not initialized.")
 
     def predict(self, tasks: List[Dict], context: Optional[Dict] = None, **kwargs) -> List[Dict]:
         """
