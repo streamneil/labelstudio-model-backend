@@ -18,13 +18,12 @@ class KimiBackend(LabelStudioMLBase):
     Kimi (Moonshot) Backend for Label Studio
     """
     
-    def setup(self):
-        """
-        Setup model, load config, initialize clients
-        """
-        self.set("model_version", os.getenv("MOONSHOT_MODEL", "moonshot-v1-8k-vision-preview"))
+    def __init__(self, **kwargs):
+        # Call base class init first
+        super(KimiBackend, self).__init__(**kwargs)
         
-        # Configuration
+        # Load config and setup
+        self.set("model_version", os.getenv("MOONSHOT_MODEL", "moonshot-v1-8k-vision-preview"))
         self.api_key = os.getenv("MOONSHOT_API_KEY")
         self.base_url = os.getenv("MOONSHOT_BASE_URL", "https://api.moonshot.cn/v1")
         self.system_prompt = os.getenv("SYSTEM_PROMPT", "你是一个智能标注助手。请详细描述这张图片的内容。")
@@ -37,6 +36,10 @@ class KimiBackend(LabelStudioMLBase):
             base_url=self.base_url,
             max_retries=2
         )
+
+    # setup is deprecated in some versions or called implicitly, but we handle it in init now
+    def setup(self):
+        pass
 
     def predict(self, tasks: List[Dict], context: Optional[Dict] = None, **kwargs) -> List[Dict]:
         """
