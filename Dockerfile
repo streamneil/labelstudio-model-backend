@@ -6,8 +6,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Create non-root user
-RUN groupadd -r labelstudio && useradd -r -g labelstudio labelstudio
+# Create non-root user with home directory
+RUN groupadd -r labelstudio && useradd -r -g labelstudio -m -d /home/labelstudio labelstudio
+
+# Set HOME environment variable
+ENV HOME=/home/labelstudio
 
 # Install dependencies
 COPY requirements.txt .

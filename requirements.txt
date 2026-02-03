@@ -1,6 +1,6 @@
 # Web Framework (replaced by label-studio-ml SDK)
 label-studio-ml==1.0.9
-# gunicorn>=21.2.0 (already in label-studio-ml dependencies)
+gunicorn>=21.2.0
 
 # OpenAI/Moonshot API
 openai>=1.6.0
