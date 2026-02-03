@@ -37,7 +37,8 @@ class KimiBackend(LabelStudioMLBase):
         """
         logger.info("Initializing KimiBackend configuration...")
         
-        self.set("model_version", os.getenv("MOONSHOT_MODEL", "moonshot-v1-8k-vision-preview"))
+        # Use direct attribute assignment instead of self.set()
+        self.model_version = os.getenv("MOONSHOT_MODEL", "moonshot-v1-8k-vision-preview")
         
         # Configuration
         self.api_key = os.getenv("MOONSHOT_API_KEY")
@@ -132,7 +133,7 @@ class KimiBackend(LabelStudioMLBase):
                 predictions.append({
                     "result": [result_item],
                     "score": 1.0,
-                    "model_version": self.get("model_version")
+                    "model_version": self.model_version
                 })
                 
             except Exception as e:
@@ -195,12 +196,10 @@ class KimiBackend(LabelStudioMLBase):
         
         messages.append({"role": "user", "content": user_content})
         
-        # Sync call to OpenAI client (wrapped in executor if needed, but here simple sync is fine inside async def for now, 
-        # actually OpenAI client is sync, so we should run it in executor to not block async loop, 
-        # BUT we are calling this from sync predict via asyncio.run, so it blocks anyway. That's acceptable for now.)
+        # sync via asyncio.run, so it blocks anyway. That's acceptable for now.)
         
         response = self.client.chat.completions.create(
-            model=self.get("model_version"),
+            model=self.model_version,
             messages=messages,
             temperature=0.3,
             max_tokens=500
