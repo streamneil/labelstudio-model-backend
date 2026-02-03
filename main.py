@@ -52,8 +52,10 @@ class KimiBackend(LabelStudioMLBase):
         for name, info in self.parsed_label_config.items():
             if info['type'] == 'TextArea':
                 # Check if it connects to an Image
-                if info.get('to_name'):
-                    target_name = info['to_name'][0]
+                # Check both snake_case (SDK standard) and camelCase (raw XML attribute) just in case
+                target_names = info.get('to_name') or info.get('toName') or []
+                if target_names:
+                    target_name = target_names[0]
                     target_info = self.parsed_label_config.get(target_name)
                     if target_info and target_info['type'] == 'Image':
                         from_name = name
@@ -63,8 +65,15 @@ class KimiBackend(LabelStudioMLBase):
                             value_key = target_info['inputs'][0]['value']
                         break
         
+        # Fallback to Environment Variables if auto-detection fails
         if not from_name or not to_name:
-            logger.error("Could not find TextArea connected to Image in Label config.")
+            logger.warning("Auto-detection of label config failed. Trying environment variables...")
+            from_name = os.getenv("LABEL_STUDIO_FROM_NAME")
+            to_name = os.getenv("LABEL_STUDIO_TO_NAME")
+            value_key = os.getenv("LABEL_STUDIO_DATA_KEY")
+            
+        if not from_name or not to_name:
+            logger.error("Could not find TextArea connected to Image in Label config, and environment variables are missing.")
             return []
 
         predictions = []
