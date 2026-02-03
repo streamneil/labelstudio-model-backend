@@ -6,7 +6,6 @@ import asyncio
 from typing import List, Dict, Optional, Union
 
 from label_studio_ml.model import LabelStudioMLBase
-from label_studio_ml.response import ModelResponse
 import openai
 import httpx
 
