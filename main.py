@@ -479,20 +479,23 @@ def create_labelstudio_prediction(generated_text: str) -> Dict[str, Any]:
     
     Uses configured from_name and to_name to match Label Studio XML config.
     """
+    result_item = {
+        "id": str(uuid.uuid4()),
+        "from_name": app_state.config.label_studio_from_name,
+        "type": "textarea",
+        "value": {
+            "text": [generated_text]
+        }
+    }
+    
+    # Only include to_name if it is configured
+    if app_state.config.label_studio_to_name:
+        result_item["to_name"] = app_state.config.label_studio_to_name
+
     prediction = {
-        "result": [
-            {
-                "id": str(uuid.uuid4()),  # Add unique ID for the result item
-                "from_name": app_state.config.label_studio_from_name,
-                "to_name": app_state.config.label_studio_to_name,
-                "type": "textarea",
-                "value": {
-                    "text": [generated_text]
-                }
-            }
-        ],
+        "result": [result_item],
         "model_version": app_state.config.model_name,
-        "score": 1.0  # Set a default confidence score
+        "score": 1.0
     }
     
     # Log the prediction for debugging
