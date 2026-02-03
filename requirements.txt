@@ -1,8 +1,6 @@
-# Web Framework
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-gunicorn>=21.2.0
-starlette>=0.27.0
+# Web Framework (replaced by label-studio-ml SDK)
+label-studio-ml==1.0.9
+# gunicorn>=21.2.0 (already in label-studio-ml dependencies)
 
 # OpenAI/Moonshot API
 openai>=1.6.0

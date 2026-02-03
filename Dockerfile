@@ -10,15 +10,14 @@ WORKDIR /app
 RUN groupadd -r labelstudio && useradd -r -g labelstudio labelstudio
 
 # Install dependencies
-# Using standard PyPI, can be overridden by build args if needed
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY --chown=labelstudio:labelstudio main.py gunicorn_conf.py ./
+COPY --chown=labelstudio:labelstudio main.py .
 
-# Create log directory and ensure permissions
+# Create log directory
 RUN mkdir -p /app/logs && \
     chown -R labelstudio:labelstudio /app
 
@@ -28,22 +27,12 @@ USER labelstudio
 # Expose port
 EXPOSE 8751
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8751/health')" || exit 1
-
-# Default environment
+# Environment defaults
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
     WORKER_COUNT=4 \
-    WORKER_CONNECTIONS=1000 \
-    BIND_HOST=0.0.0.0 \
-    BIND_PORT=8751 \
-    TIMEOUT=300 \
-    GRACEFUL_TIMEOUT=30 \
-    KEEPALIVE=5 \
-    LOG_LEVEL=INFO \
-    MAX_CONCURRENT=10
+    THREADS=8 \
+    PORT=8751
 
-# Start Gunicorn with configuration file
-CMD ["gunicorn", "main:app", "-c", "gunicorn_conf.py"]
+# Start using gunicorn with Flask app
+# label-studio-ml SDK exposes the Flask app as 'app' in main.py
+CMD exec gunicorn --bind :$PORT --workers $WORKER_COUNT --threads $THREADS --timeout 0 main:app
