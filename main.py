@@ -45,6 +45,9 @@ class KimiBackend(LabelStudioMLBase):
         # Manually parse config to find control tags (SDK v1 compatibility)
         from_name, to_name, value_key = None, None, None
         
+        # Debug: Log the parsed config to help diagnose matching issues
+        logger.info(f"Parsed Label Config: {json.dumps(self.parsed_label_config, indent=2)}")
+        
         # Iterate through parsed config to find the TextArea connected to an Image
         for name, info in self.parsed_label_config.items():
             if info['type'] == 'TextArea':
