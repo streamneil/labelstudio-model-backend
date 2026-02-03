@@ -42,11 +42,23 @@ class KimiBackend(LabelStudioMLBase):
         """
         Predict logic
         """
-        # Auto-detect control tags from schema
-        from_name, to_name, value_key = self.label_interface.get_first_tag_occurence(
-            control_type='TextArea',
-            object_type='Image'
-        )
+        # Manually parse config to find control tags (SDK v1 compatibility)
+        from_name, to_name, value_key = None, None, None
+        
+        # Iterate through parsed config to find the TextArea connected to an Image
+        for name, info in self.parsed_label_config.items():
+            if info['type'] == 'TextArea':
+                # Check if it connects to an Image
+                if info.get('to_name'):
+                    target_name = info['to_name'][0]
+                    target_info = self.parsed_label_config.get(target_name)
+                    if target_info and target_info['type'] == 'Image':
+                        from_name = name
+                        to_name = target_name
+                        # Get the variable name from the Image tag (e.g., $captioning -> captioning)
+                        if target_info.get('inputs'):
+                            value_key = target_info['inputs'][0]['value']
+                        break
         
         if not from_name or not to_name:
             logger.error("Could not find TextArea connected to Image in Label config.")
