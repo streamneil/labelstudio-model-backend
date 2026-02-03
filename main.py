@@ -482,6 +482,7 @@ def create_labelstudio_prediction(generated_text: str) -> Dict[str, Any]:
     prediction = {
         "result": [
             {
+                "id": str(uuid.uuid4()),  # Add unique ID for the result item
                 "from_name": app_state.config.label_studio_from_name,
                 "to_name": app_state.config.label_studio_to_name,
                 "type": "textarea",
