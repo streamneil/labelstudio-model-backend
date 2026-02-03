@@ -480,11 +480,17 @@ def create_labelstudio_prediction(generated_text: str) -> Dict[str, Any]:
     Uses configured from_name and to_name to match Label Studio XML config.
     """
     result_item = {
-        "id": str(uuid.uuid4()),
+        "id": f"res_{uuid.uuid4().hex[:8]}",  # Shorter ID
         "from_name": app_state.config.label_studio_from_name,
         "type": "textarea",
         "value": {
-            "text": [generated_text]
+            "text": [generated_text],
+            # Force "Whole Image" region to ensure UI renders it linked to the image
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100,
+            "rotation": 0
         }
     }
     
