@@ -70,14 +70,14 @@ class KimiBackend(LabelStudioMLBase):
         
         # Iterate through parsed config to find the TextArea connected to an Image
         for name, info in self.parsed_label_config.items():
-            if info['type'] == 'TextArea':
+            if info['type'].lower() == 'textarea':
                 # Check if it connects to an Image
                 # Check both snake_case (SDK standard) and camelCase (raw XML attribute) just in case
                 target_names = info.get('to_name') or info.get('toName') or []
                 if target_names:
                     target_name = target_names[0]
                     target_info = self.parsed_label_config.get(target_name)
-                    if target_info and target_info['type'] == 'Image':
+                    if target_info and target_info['type'].lower() == 'image':
                         from_name = name
                         to_name = target_name
                         # Get the variable name from the Image tag (e.g., $captioning -> captioning)
