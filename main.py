@@ -166,24 +166,38 @@ class KimiBackend(LabelStudioMLBase):
         
         # 2. Handle HTTP Fetch (Fallback)
         if not image_base64:
-            if self.label_studio_host and path.startswith(("/data/", "/files/")):
-                full_url = f"{self.label_studio_host.rstrip('/')}{path}"
-                logger.info(f"Downloading image: {full_url}")
-                async with httpx.AsyncClient() as client:
-                    headers = {}
-                    if self.label_studio_api_key:
-                        headers["Authorization"] = f"Token {self.label_studio_api_key}"
-                    resp = await client.get(full_url, headers=headers, timeout=30.0)
+            target_url = path
+            
+            # Handle local paths that need to be full URLs
+            if path.startswith(("/data/", "/files/")):
+                if self.label_studio_host:
+                    target_url = f"{self.label_studio_host.rstrip('/')}{path}"
+            
+            # Handle "localhost" URLs that need to be rewritten for Docker
+            elif path.startswith(("http://localhost", "http://127.0.0.1")):
+                # Replace localhost with host.docker.internal or configured host
+                replacement_host = "host.docker.internal"
+                if self.label_studio_host:
+                    # Extract hostname from configured LABEL_STUDIO_HOST
+                    from urllib.parse import urlparse
+                    replacement_host = urlparse(self.label_studio_host).netloc
+                
+                target_url = path.replace("localhost", replacement_host).replace("127.0.0.1", replacement_host)
+            
+            logger.info(f"Downloading image from: {target_url}")
+            
+            async with httpx.AsyncClient() as client:
+                headers = {}
+                if self.label_studio_api_key:
+                    headers["Authorization"] = f"Token {self.label_studio_api_key}"
+                
+                try:
+                    resp = await client.get(target_url, headers=headers, timeout=30.0)
                     resp.raise_for_status()
                     image_base64 = base64.b64encode(resp.content).decode('utf-8')
-            elif path.startswith(("http://", "https://")):
-                 # Remote URL - send directly if model supports, OR download if intranet
-                 # Kimi vision supports URL if public. Assuming Intranet -> Download.
-                 logger.info(f"Downloading remote image: {path}")
-                 async with httpx.AsyncClient() as client:
-                    resp = await client.get(path, timeout=30.0)
-                    resp.raise_for_status()
-                    image_base64 = base64.b64encode(resp.content).decode('utf-8')
+                except Exception as e:
+                    logger.error(f"Download failed for {target_url}: {e}")
+                    raise
 
         if not image_base64:
             raise ValueError(f"Could not load image data for: {path}")
