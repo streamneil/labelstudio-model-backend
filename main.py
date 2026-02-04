@@ -4,6 +4,7 @@ import json
 import base64
 import asyncio
 from typing import List, Dict, Optional, Union
+from urllib.parse import unquote, urlparse
 
 from label_studio_ml.model import LabelStudioMLBase
 import openai
@@ -154,6 +155,10 @@ class KimiBackend(LabelStudioMLBase):
         candidates = [path]
         if path.startswith("/data/"):
              candidates.append(path.replace("/data/", "/data/media/", 1))
+        
+        # Add decoded versions of all candidates (for Chinese filenames)
+        decoded_candidates = [unquote(p) for p in candidates]
+        candidates.extend([p for p in decoded_candidates if p not in candidates])
         
         image_base64 = None
         
